@@ -1,0 +1,51 @@
+#!/usr/bin/perl -w
+
+# SNMP::Extension::PassPersist is required.
+
+use strict;
+use SNMP::Extension::PassPersist;
+
+# create the object
+my $extsnmp = SNMP::Extension::PassPersist->new(
+    backend_collect => \&update_tree,
+    idle_count      => 10,      # no more than 10 idle cycles
+    refresh         => 60,      # refresh every 60 sec
+);
+
+# run the program
+$extsnmp->run;
+
+my $content;
+
+sub update_tree {
+    my ($self) = @_;
+
+        my $Base = ".1.3.6.1.2.1.31.1.1.1.18";
+        # get the interfaces
+        my @iface_list = `ip l | grep mtu | cut -d @ -f 1`;
+        my $type = "string";
+
+        foreach my $row (@iface_list){
+                my @split = split(": ", $row);
+                # remove a possible \n
+                $split[1] =~ s/\R//g;
+
+                $content = '';
+
+                # cat the file
+                my $filename = "/etc/snmp/ifalias/$split[1].ifalias";
+                open(my $fh, '<:encoding(UTF-8)', $filename)
+                        or $content = "Interface " . $split[1];
+                # fill the OID with the content
+                if ($content eq '') {
+                        while (<$fh>) {
+                                chomp $_;
+                                $content = $_;
+                        }
+                }
+                my ($key, $value) = ("$Base.$split[0]",$content);
+                $self->add_oid_entry($key,$type,$value);
+
+        close $fh;
+        }
+}
